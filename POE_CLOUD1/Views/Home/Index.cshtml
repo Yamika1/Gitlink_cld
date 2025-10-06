@@ -1,0 +1,39 @@
+﻿@{
+    ViewData["Title"] = "Home Page";
+}
+
+<style>
+    body {
+        background-image: url("/image/Screenshot 2025-08-27 184634.png");
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        min-height: 100vh;
+ 
+    }
+</style>
+
+<div class="d-flex">
+    <!-- Sidebar -->
+    <div class="sidebar bg-dark text-white p-3" style="width: 250px; min-height: 100vh;">
+        <h4 class="mb-4">Style Haven</h4>
+        <ul class="nav flex-column">
+            <li class="nav-item mb-2">
+                <a asp-controller="Order" asp-action="Index" class="btn btn-warning w-100">Orders</a>
+            </li>
+            <li class="nav-item mb-2">
+                <a asp-controller="Customer" asp-action="Index" class="btn btn-danger w-100">Customers</a>
+            </li>
+            <li class="nav-item mb-2">
+                <a asp-controller="Product" asp-action="Index" class="btn btn-primary w-100">Products</a>
+            </li>
+        </ul>
+    </div>
+
+    <!-- Main Content -->
+    <div class="flex-grow-1 p-4 text-center main-content overlay">
+        <h2 class="mb-4">Explore Style Haven</h2>
+        <h4 class="mb-4">"Elevate your style, elevate your life"</h4>
+        <p class="text-muted">Welcome to Style Haven for Women. Use the sidebar to navigate.</p>
+    </div>
+</div>

@@ -1,0 +1,47 @@
+﻿@model List<POE_CLOUD1.Models.Customer>
+
+@{
+    ViewBag.Title = "Upload and preview Order files";
+}
+
+<div class="container mt-4">
+    <h2 class="text-primary">Upload an Order File</h2>
+
+    <form asp-action="Upload" asp-controller="Customer" method="post" enctype="multipart/form-data" class="mb-4 p-3 border rounded bg-light shadow-sm">
+        <div class="mb-3">
+            <label for="file" class="form-label">Select a file: </label>
+            <input type="file" name="file" id="file" class="form-control" />
+        </div>
+        <button type="submit" class="btn btn-primary">Upload</button>
+    </form>
+
+    <h3 class="text-success">Uploaded Order Files</h3>
+    @if (Model != null && Model.Count > 0)
+    {
+        <ul class="list-group">
+            @foreach (var order in Model)
+            {
+                if (!string.IsNullOrEmpty(order.ImageUrl))
+                {
+                    <li class="list-group-item">
+                        <a asp-action="DownloadFile"
+                           asp-controller="Order"
+                           asp-route-fileName="@System.IO.Path.GetFileName(order.ImageUrl)"
+                           class="text-decoration-none">
+                            @System.IO.Path.GetFileName(order.ImageUrl)
+                        </a>
+                        - @order.ImageUrl
+                    </li>
+                }
+            }
+        </ul>
+    }
+    else
+    {
+        <p class="fst-italic text-muted">No order files uploaded yet.</p>
+    }
+
+    <div class="mt-4">
+        <a asp-action="Index" asp-controller="Customer" class="btn btn-secondary">Back to List</a>
+    </div>
+</div>

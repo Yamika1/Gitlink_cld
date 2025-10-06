@@ -1,0 +1,40 @@
+﻿@model POE_CLOUD1.Models.Order
+@{
+    ViewData["Title"] = "Order Details";
+}
+
+<h2>Order Details</h2>
+
+<div class="card mb-3">
+    @if (!string.IsNullOrEmpty(Model.ImageUrl))
+    {
+        <img src="@Model.ImageUrl" class="card-img-top" alt="@Model.OrderName" />
+    }
+
+    <div class="card-body">
+        <h4 class="card-title">@Model.OrderName</h4>
+
+        <p><strong>Type:</strong> @Model.OrderType</p>
+        <p>
+            <strong>Status:</strong>
+            <span class="badge @(Model.OrderStatus == "Pending" ? "bg-warning text-dark" :
+                                                    Model.OrderStatus == "Shipped" ? "bg-info text-dark" :
+                                                    Model.OrderStatus == "Delivered" ? "bg-success" : "bg-secondary")">
+                @Model.OrderStatus
+            </span>
+        </p>
+      @*   // <p><strong>Payment Option:</strong> @Model.PaymentOption</p>
+        // <p><strong>Order Date:</strong> @(Model.OrderDate.ToString("dd MMM yyyy HH:mm"))</p> *@
+    </div>
+
+    <div class="card-footer d-flex justify-content-between">
+        <a asp-action="Edit" asp-route-partitionKey="@Model.PartitionKey" asp-route-rowKey="@Model.RowKey" class="btn btn-warning">Edit</a>
+        <form asp-action="Delete" method="post" class="d-inline">
+            <input type="hidden" name="partitionKey" value="@Model.PartitionKey" />
+            <input type="hidden" name="rowKey" value="@Model.RowKey" />
+            <input type="hidden" name="imageUrl" value="@Model.ImageUrl" />
+            <button type="submit" class="btn btn-danger" onclick="return confirm('Are you sure?')">Delete</button>
+        </form>
+        <a asp-action="Index" class="btn btn-secondary">Back to Orders</a>
+    </div>
+</div>

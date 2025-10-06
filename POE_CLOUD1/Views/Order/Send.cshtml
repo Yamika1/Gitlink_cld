@@ -1,0 +1,9 @@
+﻿<h2>Send</h2>
+@if (ViewBag.Msg != null)
+{
+    <p>@ViewBag.Msg</p>
+}
+<form method="post">
+    <input type="text" name="message" placeholder="Type a message" style="width:320px" />
+    <button type="submit"></button>
+</form>

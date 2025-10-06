@@ -1,0 +1,42 @@
+﻿@model List<POE_CLOUD1.Models.FileModel>
+
+<h1>Files</h1>
+
+<!-- display any messages -->
+@if (TempData["message"] != null)
+{
+    <div class="alert alert-info">
+        @TempData["message"]
+    </div>
+}
+
+<!-- upload file -->
+<form asp-action="Upload" method="post" enctype="multipart/form-data">
+    <div class="form-group">
+        <label for="file">choose a file to upload: </label>
+        <input type="file" name="file" class="form-control" />
+        <button type="submit" class="btn btn-primary mt-2">Upload</button>
+    </div>
+</form>
+
+<!-- display uploaded files-->
+@if (Model != null && Model.Count > 0)
+{
+    <ul>
+        @foreach (var file in Model)
+        {
+            <li>
+                @file.Name -
+                Size: @file.DisplaySize -
+                Last Modified: @file.LastModified?.ToString("g")
+                - <a asp-action="DownloadedFile" asp-route-fileName="@file.Name">Download</a>
+            </li>
+        }
+    </ul>
+}
+else
+{
+    <p>no files found or model is null</p>
+}
+
+

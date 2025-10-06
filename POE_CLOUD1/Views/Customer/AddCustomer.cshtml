@@ -1,0 +1,41 @@
+﻿@model POE_CLOUD1.Models.Customer
+
+<div class="container py-4">
+
+    <!-- ================= ADD NEW CUSTOMER ================= -->
+    <h2 class="mb-3">Add New Customer</h2>
+    <form asp-action="AddCustomer" method="post" enctype="multipart/form-data">
+        <div class="mb-3">
+            <label asp-for="CustomerFirstName" class="form-label"></label>
+            <input asp-for="CustomerFirstName" class="form-control" />
+            <span asp-validation-for="CustomerFirstName" class="text-danger"></span>
+        </div>
+
+        <div class="mb-3">
+            <label asp-for="CustomerSurname" class="form-label"></label>
+            <input asp-for="CustomerSurname" class="form-control" />
+            <span asp-validation-for="CustomerSurname" class="text-danger"></span>
+        </div>
+
+        <div class="mb-3">
+            <label asp-for="Email" class="form-label"></label>
+            <input asp-for="Email" class="form-control" />
+            <span asp-validation-for="Email" class="text-danger"></span>
+        </div>
+
+
+
+        <div class="mb-3">
+            <label asp-for="PhoneNumber" class="form-label"></label>
+            <input asp-for="PhoneNumber" class="form-control" />
+            <span asp-validation-for="PhoneNumber" class="text-danger"></span>
+        </div>
+
+
+
+        <button type="submit" class="btn btn-success">Save</button>
+        <a asp-action="Index" class="btn btn-secondary">Cancel</a>
+    </form>
+
+    <hr class="my-4" />
+
