@@ -1,6 +1,7 @@
-using System.Diagnostics;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using POE_CLOUD1.Models;
+using System.Diagnostics;
 
 namespace POE_CLOUD1.Controllers
 {
@@ -19,6 +20,17 @@ namespace POE_CLOUD1.Controllers
         }
 
         public IActionResult Privacy()
+        {
+            return View();
+        }
+
+        [Authorize(Roles = "Admin")]
+        public IActionResult Admin()
+        {
+            return View();
+        }
+        [Authorize(Roles = "User")]
+        public IActionResult User()
         {
             return View();
         }

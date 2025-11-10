@@ -73,7 +73,7 @@ else
         File Share Storage
     </div>
     <div class="card-body">
-        <form asp-action="Upload" method="post" enctype="multipart/form-data">
+        <form asp-action="UploadFile" method="post" enctype="multipart/form-data">
             <div class="form-group">
                 <label for="file">Choose a file to upload:</label>
                 <input type="file" name="file" class="form-control" />
@@ -82,13 +82,13 @@ else
         </form>
 
         <h5 class="mt-3">Uploaded Files</h5>
-        @if (ViewBag.LocalFiles != null && ((List<FileModel>)ViewBag.LocalFiles).Count > 0)
+        @if (ViewBag.LocalFiles != null && ((List<FileModel>)ViewBag.LocalFiles).Any())
         {
             <ul class="list-group mt-2">
                 @foreach (var file in (List<FileModel>)ViewBag.LocalFiles)
                 {
                     <li class="list-group-item">
-                        @file.Name - Size: @file.DisplaySize - Modified: @file.LastModified?.ToString("g")
+                        @file.Name - Size: @file.DisplaySize - Last Modified: @file.LastModified?.ToString("g")
                         - <a asp-action="DownloadFile" asp-route-fileName="@file.Name">Download</a>
                     </li>
                 }
@@ -96,7 +96,7 @@ else
         }
         else
         {
-            <p class="fst-italic text-muted">No files found</p>
+            <p class="fst-italic text-muted">No files found in File Share.</p>
         }
     </div>
 </div>
@@ -107,7 +107,7 @@ else
         Upload to Blob Storage
     </div>
     <div class="card-body">
-        <form asp-action="Upload" asp-controller="Order" method="post" enctype="multipart/form-data">
+        <form asp-action="UploadBlob" method="post" enctype="multipart/form-data">
             <div class="mb-3">
                 <label for="uploadedFile" class="form-label">Select a file to upload:</label>
                 <input type="file" name="uploadedFile" id="uploadedFile" class="form-control" required />

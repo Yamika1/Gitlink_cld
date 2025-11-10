@@ -14,6 +14,7 @@ namespace POE_CLOUD1.Controllers
         private readonly AzureFileShareService _fileShareService;
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly IConfiguration _configuration;
+        private readonly InMemoryCatalog catalog;
 
         private readonly string _connectionString;
         private readonly string _containerName;
@@ -23,7 +24,8 @@ namespace POE_CLOUD1.Controllers
             AzureFileShareService fileShareService,
             QueueService svc,
             IHttpClientFactory httpClientFactory,
-            IConfiguration configuration)
+            IConfiguration configuration,
+            InMemoryCatalog catalog )
         {
             _tableStorageService = tableStorageService;
             _fileShareService = fileShareService;
@@ -33,23 +35,37 @@ namespace POE_CLOUD1.Controllers
 
             _connectionString = _configuration.GetConnectionString("AzureStorage");
             _containerName = _configuration["BlobStorage:Container"];
+            this.catalog = catalog;
         }
 
         // ========================= INDEX =========================
+        [HttpGet]
         public async Task<IActionResult> Index()
         {
             IEnumerable<Product> products = new List<Product>();
-            var httpClient = _httpClientFactory.CreateClient();
-            var apiBaseUrl = _configuration["FunctionApi:BaseUrl"];
 
             try
             {
-                var httpResponseMessage = await httpClient.GetAsync($"{apiBaseUrl}product");
-                if (httpResponseMessage.IsSuccessStatusCode)
+                products = await _tableStorageService.GetAllProductsAsync("Product");
+            }
+            catch
+            {
+                ViewBag.ErrorMessage = "Could not retrieve products from Table Storage.";
+            }
+
+            // Fetch products from API
+            try
+            {
+                var httpClient = _httpClientFactory.CreateClient();
+                var apiBaseUrl = _configuration["FunctionApi:BaseUrl"];
+                var response = await httpClient.GetAsync($"{apiBaseUrl}product");
+
+                if (response.IsSuccessStatusCode)
                 {
-                    using var contentStream = await httpResponseMessage.Content.ReadAsStreamAsync();
+                    using var stream = await response.Content.ReadAsStreamAsync();
                     var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-                    products = await JsonSerializer.DeserializeAsync<IEnumerable<Product>>(contentStream, options);
+                    var apiProducts = await JsonSerializer.DeserializeAsync<IEnumerable<Product>>(stream, options);
+                    if (apiProducts != null) products = products.Concat(apiProducts);
                 }
                 else
                 {
@@ -58,61 +74,74 @@ namespace POE_CLOUD1.Controllers
             }
             catch
             {
-                ViewBag.ErrorMessage = "Could not connect to the API. Please ensure the Azure Function is running.";
+                ViewBag.ErrorMessage ??= "Could not connect to the API.";
             }
 
+            // File Share files
             try { ViewBag.LocalFiles = await _fileShareService.ListFilesAsync("uploads"); }
             catch { ViewBag.LocalFiles = new List<FileModel>(); }
 
+            // Blob Storage files
             try { ViewBag.BlobFiles = await FetchBlobUrlsAsync(); }
             catch { ViewBag.BlobFiles = new List<string>(); }
 
+            // Queue messages
             try { ViewBag.QueueMessages = await _svc.PeekMessagesAsync(5); }
             catch { ViewBag.QueueMessages = new List<string>(); }
 
             return View(products);
         }
-
-        // ========================= BLOB METHODS =========================
-        [HttpPost]
-        public async Task<IActionResult> Upload(IFormFile uploadedFile)
+        [HttpGet]
+        public IActionResult AddToCart(int id)
         {
-            if (uploadedFile != null && uploadedFile.Length > 0)
+            var product = catalog.Find(id);
+            if (product == null) return NotFound();
+
+            return View(product);
+        }
+
+        [HttpPost]
+        public IActionResult AddToCart(int id, int qty = 1)
+        {
+            var product = catalog.Find(id);
+            if (product == null) return NotFound();
+
+
+            var data = HttpContext.Session.GetString("CART");
+            var cart = data == null ? new List<CartItem>() : JsonSerializer.Deserialize<List<CartItem>>(data) ?? new List<CartItem>();
+
+
+
+            var existing = cart.FirstOrDefault(c => c.ProductId == id);
+            if (existing == null)
             {
-                await UploadFileToBlobStorageAsync(uploadedFile);
-                TempData["message"] = $"File '{uploadedFile.FileName}' uploaded to Blob successfully!";
+                cart.Add(new CartItem
+                {
+                    ProductId = product.Id,
+                    Name = product.Name,
+                    UnitPrice = product.Price,
+                    Quantity = Math.Max(1, qty)
+                });
             }
             else
             {
-                TempData["message"] = "Please select a file to upload.";
+                var updated = existing with { Quantity = existing.Quantity + Math.Max(1, qty) };
+                cart.Remove(existing);
+                cart.Add(updated);
             }
 
-            return RedirectToAction("Index");
+
+            var json = JsonSerializer.Serialize(cart.OrderBy(c => c.ProductId).ToList());
+            HttpContext.Session.SetString("CART", json);
+
+            TempData["msg"] = $"{product.Name} added to cart";
+
+            return RedirectToAction("Index", "Cart");
         }
 
-        private async Task UploadFileToBlobStorageAsync(IFormFile uploadedFile)
-        {
-            var containerClient = new BlobContainerClient(_connectionString, _containerName);
-            await containerClient.CreateIfNotExistsAsync(PublicAccessType.Blob);
+       
 
-            var blobClient = containerClient.GetBlobClient(uploadedFile.FileName);
-            using var stream = uploadedFile.OpenReadStream();
-            await blobClient.UploadAsync(stream, overwrite: true);
-        }
-
-        private async Task<List<string>> FetchBlobUrlsAsync()
-        {
-            var blobUrls = new List<string>();
-            var containerClient = new BlobContainerClient(_connectionString, _containerName);
-
-            await foreach (var blobItem in containerClient.GetBlobsAsync())
-            {
-                var blobClient = containerClient.GetBlobClient(blobItem.Name);
-                blobUrls.Add(blobClient.Uri.ToString());
-            }
-            return blobUrls;
-        }
-
+        // ========================= BLOB METHODS =========================
         private async Task<string> UploadFileToBlobStorageAndReturnUrl(Stream stream, string fileName)
         {
             var containerClient = new BlobContainerClient(_connectionString, _containerName);
@@ -131,104 +160,29 @@ namespace POE_CLOUD1.Controllers
             await blobClient.DeleteIfExistsAsync();
         }
 
-        // ========================= PRODUCT CRUD =========================
-        [HttpGet]
-        public IActionResult AddProduct() => View();
-
-        [HttpPost]
-        public async Task<IActionResult> AddProduct(Product product, IFormFile? file)
+        private async Task<List<string>> FetchBlobUrlsAsync()
         {
-            if (file != null && file.Length > 0)
+            var blobUrls = new List<string>();
+            var containerClient = new BlobContainerClient(_connectionString, _containerName);
+
+            await foreach (var blobItem in containerClient.GetBlobsAsync())
             {
-                using var stream = file.OpenReadStream();
-                product.ImageURL = await UploadFileToBlobStorageAndReturnUrl(stream, file.FileName);
+                var blobClient = containerClient.GetBlobClient(blobItem.Name);
+                blobUrls.Add(blobClient.Uri.ToString());
             }
 
-            if (ModelState.IsValid)
-            {
-                product.PartitionKey = "ProductPartition";
-                product.RowKey = Guid.NewGuid().ToString();
-                await _tableStorageService.AddProductAsync(product);
-                TempData["message"] = "Product added successfully!";
-                return RedirectToAction("Index");
-            }
-
-            return View(product);
-        }
-
-        [HttpGet]
-        public async Task<IActionResult> EditProduct(string rowKey)
-        {
-            var product = await _tableStorageService.GetProductByIdAsync("ProductPartition", rowKey);
-            if (product == null) return NotFound();
-            return View(product);
-        }
-
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        public async Task<IActionResult> EditProduct(Product product, IFormFile? file)
-        {
-            if (!ModelState.IsValid)
-                return View(product);
-
-            try
-            {
-                if (file != null && file.Length > 0)
-                {
-                    if (!string.IsNullOrEmpty(product.ImageURL))
-                    {
-                        await DeleteBlobAsync(product.ImageURL);
-                    }
-
-                    using var stream = file.OpenReadStream();
-                    product.ImageURL = await UploadFileToBlobStorageAndReturnUrl(stream, file.FileName);
-                }
-
-                await _tableStorageService.UpdateProductAsync(product);
-                TempData["message"] = "Product updated successfully!";
-                return RedirectToAction("Index");
-            }
-            catch (Exception ex)
-            {
-                TempData["message"] = $"Error updating product: {ex.Message}";
-                return View(product);
-            }
-        }
-
-        [HttpGet]
-        public async Task<IActionResult> DeleteProduct(string rowKey)
-        {
-            var product = await _tableStorageService.GetProductByIdAsync("ProductPartition", rowKey);
-            if (product == null) return NotFound();
-            return View(product);
-        }
-
-        [HttpPost, ActionName("DeleteProduct")]
-        public async Task<IActionResult> DeleteConfirmed(string rowKey)
-        {
-            var product = await _tableStorageService.GetProductByIdAsync("ProductPartition", rowKey);
-            if (product != null)
-            {
-                if (!string.IsNullOrEmpty(product.ImageURL))
-                {
-                    await DeleteBlobAsync(product.ImageURL);
-                }
-
-                await _tableStorageService.DeleteProductAsync("ProductPartition", rowKey);
-                TempData["message"] = "Product deleted successfully!";
-            }
-
-            return RedirectToAction("Index");
+            return blobUrls;
         }
 
         // ========================= FILE SHARE =========================
         [HttpPost]
+        [ValidateAntiForgeryToken]
         public async Task<IActionResult> UploadFile(IFormFile? file)
         {
             if (file == null || file.Length == 0)
             {
-                ModelState.AddModelError("file", "Please select a file to upload");
-                return await Index();
+                TempData["message"] = "Please select a file to upload";
+                return RedirectToAction("Index");
             }
 
             try
@@ -263,11 +217,11 @@ namespace POE_CLOUD1.Controllers
             }
         }
 
+        // ========================= QUEUE MESSAGE =========================
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Send(string? message)
         {
-
             if (string.IsNullOrWhiteSpace(message))
             {
                 ViewBag.Msg = "Please enter a message before sending.";
@@ -277,7 +231,6 @@ namespace POE_CLOUD1.Controllers
                 await _svc.SendAsync(message.Trim());
                 ViewBag.Msg = $"Message sent: \"{message}\"";
             }
-
 
             try
             {

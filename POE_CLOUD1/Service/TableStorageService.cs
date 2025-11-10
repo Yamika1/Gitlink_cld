@@ -107,6 +107,18 @@ namespace POE_CLOUD1.Service
                 throw new InvalidOperationException("Error adding entity to Table Storage", ex);
             }
         }
+        public async Task<List<Product>> GetAllProductsAsync(string partitionKey)
+        {
+            var products = new List<Product>();
+
+            await foreach (var product in _tableClient.QueryAsync<Product>(p => p.PartitionKey == partitionKey))
+            {
+                products.Add(product);
+            }
+
+            return products;
+        }
+
         public async Task<Product?> GetProductByIdAsync(string partitionKey, string rowKey)
         {
             try

@@ -16,35 +16,53 @@ namespace POE_CLOUD1.Controllers
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly IConfiguration _configuration;
 
+        private readonly string _connectionString;
+        private readonly string _containerName;
+
         public CustomerController(
             TableStorageService tableStorageService,
             AzureFileShareService fileShareService,
-            QueueService queueService,
+            QueueService svc,
             IHttpClientFactory httpClientFactory,
             IConfiguration configuration)
         {
             _tableStorageService = tableStorageService;
             _fileShareService = fileShareService;
-            _svc = queueService;
+            _svc = svc;
             _httpClientFactory = httpClientFactory;
             _configuration = configuration;
+
+            _connectionString = _configuration.GetConnectionString("AzureStorage");
+            _containerName = _configuration["BlobStorage:Container"];
         }
 
-        // ========================= INDEX =========================
+        [HttpGet]
         public async Task<IActionResult> Index()
         {
             IEnumerable<Customer> customers = new List<Customer>();
-            var httpClient = _httpClientFactory.CreateClient();
-            var apiBaseUrl = _configuration["FunctionApi:BaseUrl"];
 
             try
             {
+                customers = await _tableStorageService.GetAllCustomersAsync();
+            }
+            catch
+            {
+                ViewBag.ErrorMessage = "Could not retrieve customers from Table Storage.";
+            }
+
+            // Fetch customers from API
+            try
+            {
+                var httpClient = _httpClientFactory.CreateClient();
+                var apiBaseUrl = _configuration["FunctionApi:BaseUrl"];
                 var response = await httpClient.GetAsync($"{apiBaseUrl}customer");
+
                 if (response.IsSuccessStatusCode)
                 {
-                    using var contentStream = await response.Content.ReadAsStreamAsync();
+                    using var stream = await response.Content.ReadAsStreamAsync();
                     var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-                    customers = await JsonSerializer.DeserializeAsync<IEnumerable<Customer>>(contentStream, options);
+                    var apiCustomers = await JsonSerializer.DeserializeAsync<IEnumerable<Customer>>(stream, options);
+                    if (apiCustomers != null) customers = customers.Concat(apiCustomers);
                 }
                 else
                 {
@@ -53,108 +71,172 @@ namespace POE_CLOUD1.Controllers
             }
             catch
             {
-                ViewBag.ErrorMessage = "Could not connect to the API. Falling back to Table Storage.";
-                customers = await _tableStorageService.GetAllCustomersAsync();
+                ViewBag.ErrorMessage ??= "Could not connect to the API.";
             }
 
-            try { ViewBag.LocalFiles = await _fileShareService.ListFilesAsync("uploads"); }
-            catch { ViewBag.LocalFiles = new List<FileModel>(); }
+            // File Share files
+            try
+            {
+                ViewBag.LocalFiles = await _fileShareService.ListFilesAsync("uploads");
+            }
+            catch
+            {
+                ViewBag.LocalFiles = new List<FileModel>();
+            }
 
-            try { ViewBag.QueueMessages = await _svc.PeekMessagesAsync(5); }
-            catch { ViewBag.QueueMessages = new List<string>(); }
+            // Blob Storage files
+            try
+            {
+                ViewBag.BlobFiles = await FetchBlobUrlsAsync();
+            }
+            catch
+            {
+                ViewBag.BlobFiles = new List<string>();
+            }
+
+            // Queue messages
+            try
+            {
+                ViewBag.QueueMessages = await _svc.PeekMessagesAsync(5);
+            }
+            catch
+            {
+                ViewBag.QueueMessages = new List<string>();
+            }
 
             return View(customers);
         }
 
-        // ========================= CUSTOMER CRUD =========================
         [HttpGet]
-        public IActionResult AddCustomer() => View();
+        public IActionResult AddCustomer() => View(new Customer());
 
         [HttpPost]
+        [ValidateAntiForgeryToken]
         public async Task<IActionResult> AddCustomer(Customer customer, IFormFile? file)
         {
-            if (!ModelState.IsValid)
+            if (file != null && file.Length > 0)
+                customer.ImageUrl = await UploadFileToBlobStorageAndReturnUrl(file.OpenReadStream(), file.FileName);
+
+            if (ModelState.IsValid)
             {
-                TempData["message"] = "Invalid details";
+                customer.PartitionKey = "Customer";
+                customer.RowKey = Guid.NewGuid().ToString();
+                customer.Timestamp = DateTimeOffset.UtcNow;
+
+                await _tableStorageService.AddCustomerAsync(customer);
+
+                TempData["message"] = "Customer added successfully!";
                 return RedirectToAction("Index");
             }
 
-            customer.PartitionKey = "Customer";
-            customer.RowKey = Guid.NewGuid().ToString();
+            return View(customer);
+        }
 
-          
-            await _tableStorageService.AddCustomerAsync(customer);
-            TempData["message"] = "Customer added successfully!";
-            return RedirectToAction("Index");
+        [HttpGet]
+        public async Task<IActionResult> Details(string partitionKey, string rowKey)
+        {
+            if (string.IsNullOrEmpty(partitionKey) || string.IsNullOrEmpty(rowKey))
+                return NotFound();
+
+            var customer = await _tableStorageService.GetCustomerByIdAsync(partitionKey, rowKey);
+            if (customer == null) return NotFound();
+
+            return View(customer);
         }
 
         [HttpGet]
         public async Task<IActionResult> Edit(string partitionKey, string rowKey)
         {
+            if (string.IsNullOrEmpty(partitionKey) || string.IsNullOrEmpty(rowKey))
+                return NotFound();
+
             var customer = await _tableStorageService.GetCustomerByIdAsync(partitionKey, rowKey);
             if (customer == null) return NotFound();
+
             return View(customer);
         }
 
         [HttpPost]
+        [ValidateAntiForgeryToken]
         public async Task<IActionResult> Edit(Customer customer, IFormFile? file)
         {
-            if (!ModelState.IsValid) return View(customer);
+            if (file != null && file.Length > 0)
+                customer.ImageUrl = await UploadFileToBlobStorageAndReturnUrl(file.OpenReadStream(), file.FileName);
 
-            await _tableStorageService.UpdateCustomerAsync(customer);
-            TempData["message"] = "Customer updated successfully!";
-            return RedirectToAction("Index");
-        }
+            if (ModelState.IsValid)
+            {
+                await _tableStorageService.UpdateCustomerAsync(customer);
+                TempData["message"] = "Customer updated successfully!";
+                return RedirectToAction("Index");
+            }
 
-        [HttpGet]
-        public async Task<IActionResult> Delete(string partitionKey, string rowKey)
-        {
-            var customer = await _tableStorageService.GetCustomerByIdAsync(partitionKey, rowKey);
-            if (customer == null) return NotFound();
             return View(customer);
         }
 
         [HttpPost]
-        public async Task<IActionResult> CustomerDelete(string partitionKey, string rowKey)
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Delete(string partitionKey, string rowKey, string? imageUrl)
         {
+            if (!string.IsNullOrEmpty(imageUrl))
+                await DeleteBlobAsync(imageUrl);
+
             await _tableStorageService.DeleteCustomerAsync(partitionKey, rowKey);
             TempData["message"] = "Customer deleted successfully!";
             return RedirectToAction("Index");
         }
-        [HttpGet]
-        public async Task<IActionResult> Details(string partitionKey, string rowKey)
+
+        // ========================= BLOB METHODS =========================
+        private async Task<string> UploadFileToBlobStorageAndReturnUrl(Stream stream, string fileName)
         {
-            if (string.IsNullOrEmpty(partitionKey) || string.IsNullOrEmpty(rowKey))
-                return BadRequest();
+            var containerClient = new BlobContainerClient(_connectionString, _containerName);
+            await containerClient.CreateIfNotExistsAsync(PublicAccessType.Blob);
 
-            var customer = await _tableStorageService.GetCustomerByIdAsync(partitionKey, rowKey);
-            if (customer == null) return NotFound();
-
-            return View(customer); 
+            var blobClient = containerClient.GetBlobClient(fileName);
+            await blobClient.UploadAsync(stream, overwrite: true);
+            return blobClient.Uri.ToString();
         }
 
-        // ========================= FILE SHARE =========================
-        [HttpGet]
-        public IActionResult UploadFile() => View();
+        private async Task DeleteBlobAsync(string blobUrl)
+        {
+            var containerClient = new BlobContainerClient(_connectionString, _containerName);
+            var blobName = Path.GetFileName(blobUrl);
+            var blobClient = containerClient.GetBlobClient(blobName);
+            await blobClient.DeleteIfExistsAsync();
+        }
 
+        private async Task<List<string>> FetchBlobUrlsAsync()
+        {
+            var blobUrls = new List<string>();
+            var containerClient = new BlobContainerClient(_connectionString, _containerName);
+
+            await foreach (var blobItem in containerClient.GetBlobsAsync())
+            {
+                var blobClient = containerClient.GetBlobClient(blobItem.Name);
+                blobUrls.Add(blobClient.Uri.ToString());
+            }
+
+            return blobUrls;
+        }
+
+        // ========================= FILE SHARE METHODS =========================
         [HttpPost]
         public async Task<IActionResult> UploadFile(IFormFile? file)
         {
             if (file == null || file.Length == 0)
             {
-                ModelState.AddModelError("file", "Please select a file to upload");
-                return await Index();
+                TempData["message"] = "Please select a file to upload.";
+                return RedirectToAction("Index");
             }
 
             try
             {
                 using var stream = file.OpenReadStream();
                 await _fileShareService.UploadFileAsync("uploads", file.FileName, stream);
-                TempData["message"] = $"File '{file.FileName}' uploaded successfully";
+                TempData["message"] = $"File '{file.FileName}' uploaded successfully.";
             }
-            catch (Exception e)
+            catch (Exception ex)
             {
-                TempData["message"] = $"File upload failed: {e.Message}";
+                TempData["message"] = $"File upload failed: {ex.Message}";
             }
 
             return RedirectToAction("Index");
@@ -163,27 +245,26 @@ namespace POE_CLOUD1.Controllers
         [HttpGet]
         public async Task<IActionResult> DownloadFile(string fileName)
         {
-            if (string.IsNullOrEmpty(fileName)) return BadRequest("File name cannot be null or empty");
+            if (string.IsNullOrEmpty(fileName)) return BadRequest("File name cannot be null or empty.");
 
             try
             {
                 var fileStream = await _fileShareService.DownloadFileAsync("uploads", fileName);
-                if (fileStream == null) return NotFound($"File '{fileName}' not found");
+                if (fileStream == null) return NotFound($"File '{fileName}' not found.");
 
                 return File(fileStream, "application/octet-stream", fileName);
             }
-            catch (Exception e)
+            catch (Exception ex)
             {
-                return BadRequest($"Error downloading file: {e.Message}");
+                return BadRequest($"Error downloading file: {ex.Message}");
             }
         }
 
-
+        // ========================= QUEUE MESSAGE =========================
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Send(string? message)
         {
-
             if (string.IsNullOrWhiteSpace(message))
             {
                 ViewBag.Msg = "Please enter a message before sending.";
@@ -193,7 +274,6 @@ namespace POE_CLOUD1.Controllers
                 await _svc.SendAsync(message.Trim());
                 ViewBag.Msg = $"Message sent: \"{message}\"";
             }
-
 
             try
             {

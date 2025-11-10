@@ -41,9 +41,16 @@ namespace POE_CLOUD1.Controllers
         {
             IEnumerable<Order> orders = new List<Order>();
 
-            try { orders = await _tableStorageService.GetAllOrdersAsync("OrderPartition"); }
-            catch { ViewBag.ErrorMessage = "Could not retrieve orders from Table Storage."; }
+            try
+            {
+                orders = await _tableStorageService.GetAllOrdersAsync("OrderPartition");
+            }
+            catch
+            {
+                ViewBag.ErrorMessage = "Could not retrieve orders from Table Storage.";
+            }
 
+            // Fetch orders from API
             try
             {
                 var httpClient = _httpClientFactory.CreateClient();
@@ -62,16 +69,40 @@ namespace POE_CLOUD1.Controllers
                     ViewBag.ErrorMessage = "API returned an error while retrieving orders.";
                 }
             }
-            catch { ViewBag.ErrorMessage ??= "Could not connect to the API."; }
+            catch
+            {
+                ViewBag.ErrorMessage ??= "Could not connect to the API.";
+            }
 
-            try { ViewBag.LocalFiles = await _fileShareService.ListFilesAsync("uploads"); }
-            catch { ViewBag.LocalFiles = new List<FileModel>(); }
+            // File Share files
+            try
+            {
+                ViewBag.LocalFiles = await _fileShareService.ListFilesAsync("uploads");
+            }
+            catch
+            {
+                ViewBag.LocalFiles = new List<FileModel>();
+            }
 
-            try { ViewBag.BlobFiles = await FetchBlobUrlsAsync(); }
-            catch { ViewBag.BlobFiles = new List<string>(); }
+            // Blob Storage files
+            try
+            {
+                ViewBag.BlobFiles = await FetchBlobUrlsAsync();
+            }
+            catch
+            {
+                ViewBag.BlobFiles = new List<string>();
+            }
 
-            try { ViewBag.QueueMessages = await _svc.PeekMessagesAsync(5); }
-            catch { ViewBag.QueueMessages = new List<string>(); }
+            // Queue messages
+            try
+            {
+                ViewBag.QueueMessages = await _svc.PeekMessagesAsync(5);
+            }
+            catch
+            {
+                ViewBag.QueueMessages = new List<string>();
+            }
 
             return View(orders);
         }
@@ -169,7 +200,6 @@ namespace POE_CLOUD1.Controllers
             return RedirectToAction("Details", new { partitionKey = order.PartitionKey, rowKey = order.RowKey });
         }
 
-
         // ========================= BLOB METHODS =========================
         private async Task<string> UploadFileToBlobStorageAndReturnUrl(Stream stream, string fileName)
         {
@@ -199,29 +229,73 @@ namespace POE_CLOUD1.Controllers
                 var blobClient = containerClient.GetBlobClient(blobItem.Name);
                 blobUrls.Add(blobClient.Uri.ToString());
             }
+
             return blobUrls;
         }
 
+        [HttpPost]
+        public async Task<IActionResult> UploadBlob(IFormFile uploadedFile)
+        {
+            if (uploadedFile == null || uploadedFile.Length == 0)
+            {
+                TempData["message"] = "Please select a file to upload.";
+                return RedirectToAction("Index");
+            }
 
-        // ========================= FILE SHARE =========================
+            try
+            {
+                using var stream = uploadedFile.OpenReadStream();
+                await UploadFileToBlobStorageAndReturnUrl(stream, uploadedFile.FileName);
+                TempData["message"] = $"Blob '{uploadedFile.FileName}' uploaded successfully!";
+            }
+            catch (Exception ex)
+            {
+                TempData["message"] = $"Blob upload failed: {ex.Message}";
+            }
+
+            return RedirectToAction("Index");
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> DownloadBlob(string blobName)
+        {
+            if (string.IsNullOrEmpty(blobName)) return BadRequest("Blob name is required");
+
+            try
+            {
+                var containerClient = new BlobContainerClient(_connectionString, _containerName);
+                var blobClient = containerClient.GetBlobClient(blobName);
+                var response = await blobClient.DownloadContentAsync();
+                var content = response.Value.Content.ToArray();
+                var contentType = response.Value.Details.ContentType ?? "application/octet-stream";
+
+                return File(content, contentType, blobName);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest($"Error downloading blob: {ex.Message}");
+            }
+        }
+
+        // ========================= FILE SHARE METHODS =========================
         [HttpPost]
         public async Task<IActionResult> UploadFile(IFormFile? file)
         {
             if (file == null || file.Length == 0)
             {
-                ModelState.AddModelError("file", "Please select a file to upload");
-                return await Index();
+                TempData["message"] = "Please select a file to upload.";
+                return RedirectToAction("Index");
             }
 
             try
             {
                 using var stream = file.OpenReadStream();
                 await _fileShareService.UploadFileAsync("uploads", file.FileName, stream);
-                TempData["message"] = $"File '{file.FileName}' uploaded successfully";
+                TempData["message"] = $"File '{file.FileName}' uploaded successfully.";
             }
-            catch (Exception e)
+            catch (Exception ex)
             {
-                TempData["message"] = $"File upload failed: {e.Message}";
+                TempData["message"] = $"File upload failed: {ex.Message}";
             }
 
             return RedirectToAction("Index");
@@ -230,26 +304,26 @@ namespace POE_CLOUD1.Controllers
         [HttpGet]
         public async Task<IActionResult> DownloadFile(string fileName)
         {
-            if (string.IsNullOrEmpty(fileName)) return BadRequest("File name cannot be null or empty");
+            if (string.IsNullOrEmpty(fileName)) return BadRequest("File name cannot be null or empty.");
 
             try
             {
                 var fileStream = await _fileShareService.DownloadFileAsync("uploads", fileName);
-                if (fileStream == null) return NotFound($"File '{fileName}' not found");
+                if (fileStream == null) return NotFound($"File '{fileName}' not found.");
 
                 return File(fileStream, "application/octet-stream", fileName);
             }
-            catch (Exception e)
+            catch (Exception ex)
             {
-                return BadRequest($"Error downloading file: {e.Message}");
+                return BadRequest($"Error downloading file: {ex.Message}");
             }
         }
 
+        // ========================= QUEUE MESSAGE =========================
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Send(string? message)
         {
-            
             if (string.IsNullOrWhiteSpace(message))
             {
                 ViewBag.Msg = "Please enter a message before sending.";
@@ -260,7 +334,6 @@ namespace POE_CLOUD1.Controllers
                 ViewBag.Msg = $"Message sent: \"{message}\"";
             }
 
-          
             try
             {
                 ViewBag.QueueMessages = await _svc.PeekMessagesAsync(5);

@@ -13,6 +13,16 @@
     }
 </style>
 
+@if (User.Identity.IsAuthenticated)
+{
+    <p> You are logged in as: <strong>@User.Identity.Name</strong></p>
+}
+else
+{
+    <p>You are not logged in.</p>
+}
+
+
 <div class="d-flex">
     <!-- Sidebar -->
     <div class="sidebar bg-dark text-white p-3" style="width: 250px; min-height: 100vh;">

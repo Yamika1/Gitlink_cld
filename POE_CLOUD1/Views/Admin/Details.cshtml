@@ -1,0 +1,26 @@
+﻿@model POE_CLOUD1.ViewModel.UserDetailsViewModel
+
+@{
+    ViewData["Title"] = "User Details";
+}
+
+<h2>User Details</h2>
+
+<div>
+    <p><strong>Full Name:</strong> @Model.FullName</p>
+    <p><strong>Email:</strong> @Model.Email</p>
+    <p><strong>Roles:</strong> @string.Join(", ", Model.Roles)</p>
+</div>
+
+<h4>Change Role</h4>
+<form asp-action="ChangeRole" method="post">
+    <input type="hidden" name="id" value="@Model.Id" />
+    <select name="role" class="form-select">
+        <option value="User">User</option>
+        <option value="Admin">Admin</option>
+    </select>
+    <button type="submit" class="btn btn-primary mt-2">Update Role</button>
+</form>
+
+<a asp-action="Dashboard" class="btn btn-secondary mt-3">Back to Dashboard</a>
+

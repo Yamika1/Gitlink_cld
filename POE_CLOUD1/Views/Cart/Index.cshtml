@@ -1,0 +1,71 @@
+﻿@model IEnumerable<CartItem>
+
+@{
+    ViewData["Title"] = "Your Cart";
+    var total = (decimal)(ViewBag.Total ?? Model.Sum(i => i.LineTotal));
+}
+
+<h2>Your Cart</h2>
+
+@if (TempData["msg"] != null)
+{
+    <div class="alert alert-success">
+        @TempData["msg"]
+    </div>
+}
+
+@if (!Model.Any())
+{
+    <div class="alert alert-info">Your cart is empty.</div>
+    <a asp-controller="Product" asp-action="Index" class="btn btn-primary">Continue Shopping</a>
+}
+else
+{
+    <form asp-action="Clear" method="post" class="mb-3">
+        <button type="submit" class="btn btn-outline-danger btn-sm">Clear Cart</button>
+        <a asp-controller="Product" asp-action="Index" class="btn btn-outline-secondary btn-sm">Continue Shopping</a>
+    </form>
+
+    <table class="table table-bordered align-middle">
+        <thead class="table-light">
+            <tr>
+                <th>Product</th>
+                <th class="text-end">Unit Price</th>
+                <th style="width:120px;">Quantity</th>
+                <th class="text-end">Line Total</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var item in Model.OrderBy(c => c.ProductId))
+            {
+                <tr>
+                    <td>@item.Name</td>
+                    <td class="text-end">@item.UnitPrice.ToString("C")</td>
+                    <td>
+                        <form asp-action="Update" method="post" class="d-inline">
+                            <input type="hidden" name="productId" value="@item.ProductId" />
+                            <input type="number" name="qty" value="@item.Quantity" min="0" class="form-control d-inline" style="width:80px;" />
+                            <button class="btn btn-sm btn-primary">Update</button>
+                        </form>
+                    </td>
+                    <td class="text-end">@item.LineTotal.ToString("C")</td>
+                    <td>
+                        <form asp-action="Update" method="post" class="d-inline">
+                            <input type="hidden" name="productId" value="@item.ProductId" />
+                            <input type="hidden" name="qty" value="0" />
+                            <button class="btn btn-sm btn-outline-danger">Remove</button>
+                        </form>
+                    </td>
+                </tr>
+            }
+        </tbody>
+        <tfoot>
+            <tr>
+                <th colspan="3" class="text-end">Total:</th>
+                <th class="text-end">@total.ToString("C")</th>
+                <th></th>
+            </tr>
+        </tfoot>
+    </table>
+}

@@ -61,14 +61,13 @@
         </tbody>
     </table>
 </div>
-
 <!-- ================= FILE SHARE STORAGE ================= -->
 <div class="card mb-4 shadow-sm">
     <div class="card-header bg-secondary text-white">
         File Share Storage
     </div>
     <div class="card-body">
-        <form asp-action="Upload" method="post" enctype="multipart/form-data">
+        <form asp-action="UploadFile" method="post" enctype="multipart/form-data">
             <div class="form-group">
                 <label for="file">Choose a file to upload:</label>
                 <input type="file" name="file" class="form-control" />
@@ -95,20 +94,20 @@
         }
     </div>
 </div>
+
 <!-- ================= BLOB STORAGE ================= -->
 <div class="card mb-4 shadow-sm">
     <div class="card-header bg-primary text-white">
         Upload to Blob Storage
     </div>
     <div class="card-body">
-        <form asp-action="Upload" asp-controller="Customer" method="post" enctype="multipart/form-data">
+        <form asp-action="UploadBlob" method="post" enctype="multipart/form-data">
             <div class="mb-3">
                 <label for="uploadedFile" class="form-label">Select a file to upload:</label>
                 <input type="file" name="uploadedFile" id="uploadedFile" class="form-control" required />
             </div>
             <button type="submit" class="btn btn-primary">Upload</button>
         </form>
-
 
         <h5 class="mt-4">Uploaded Blob Files</h5>
         @if (ViewBag.BlobFiles != null && ((List<string>)ViewBag.BlobFiles).Any())
