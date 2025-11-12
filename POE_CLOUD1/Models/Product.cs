@@ -17,7 +17,7 @@ namespace POE_CLOUD1.Models
         public string? ProductImage { get; set; }
         public string? ProductType { get; set; }
 
-        public double? ProductPrice { get; set; }
+        public decimal? ProductPrice { get; set; }
 
         public int? Quantity { get; set; }
 

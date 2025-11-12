@@ -1,0 +1,28 @@
+﻿@model POE_CLOUD1.Models.Product
+@{
+    ViewData["Title"] = "Add New Product";
+}
+
+<h2>Add New Product</h2>
+
+<form asp-action="AddProduct" method="post" enctype="multipart/form-data">
+    <div class="mb-3">
+        <label asp-for="ProductName" class="form-label"></label>
+        <input asp-for="ProductName" class="form-control" />
+    </div>
+
+    <div class="mb-3">
+        <label asp-for="ProductType" class="form-label"></label>
+        <input asp-for="ProductType" class="form-control" />
+    </div>
+
+
+    <div class="mb-3">
+        <label asp-for="ProductDescription" class="form-label"></label>
+        <input asp-for="ProductDescription" class="form-control" />
+    </div>
+
+
+    <button type="submit" class="btn btn-success">Save</button>
+    <a asp-action="Index" class="btn btn-secondary">Cancel</a>
+</form>

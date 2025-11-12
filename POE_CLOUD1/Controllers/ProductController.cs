@@ -14,7 +14,7 @@ namespace POE_CLOUD1.Controllers
         private readonly AzureFileShareService _fileShareService;
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly IConfiguration _configuration;
-        private readonly InMemoryCatalog catalog;
+        private readonly InMemoryCatalog _catalog;
 
         private readonly string _connectionString;
         private readonly string _containerName;
@@ -25,35 +25,46 @@ namespace POE_CLOUD1.Controllers
             QueueService svc,
             IHttpClientFactory httpClientFactory,
             IConfiguration configuration,
-            InMemoryCatalog catalog )
+            InMemoryCatalog catalog)
         {
             _tableStorageService = tableStorageService;
             _fileShareService = fileShareService;
             _svc = svc;
             _httpClientFactory = httpClientFactory;
             _configuration = configuration;
+            _catalog = catalog;
 
             _connectionString = _configuration.GetConnectionString("AzureStorage");
             _containerName = _configuration["BlobStorage:Container"];
-            this.catalog = catalog;
         }
 
         // ========================= INDEX =========================
         [HttpGet]
         public async Task<IActionResult> Index()
         {
-            IEnumerable<Product> products = new List<Product>();
+            // Start with local in-memory catalog products
+            var allProducts = _catalog.Products
+                .Select(p => new Product
+                {
+                    ProductId = p.Id,
+                    ProductName = p.Name,
+                    ProductPrice = p.Price
+                })
+                .ToList();
 
+           
             try
             {
-                products = await _tableStorageService.GetAllProductsAsync("Product");
+                var tableProducts = await _tableStorageService.GetAllProductsAsync("Product");
+                if (tableProducts != null)
+                    allProducts.AddRange(tableProducts);
             }
             catch
             {
                 ViewBag.ErrorMessage = "Could not retrieve products from Table Storage.";
             }
 
-            // Fetch products from API
+     
             try
             {
                 var httpClient = _httpClientFactory.CreateClient();
@@ -65,23 +76,19 @@ namespace POE_CLOUD1.Controllers
                     using var stream = await response.Content.ReadAsStreamAsync();
                     var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
                     var apiProducts = await JsonSerializer.DeserializeAsync<IEnumerable<Product>>(stream, options);
-                    if (apiProducts != null) products = products.Concat(apiProducts);
-                }
-                else
-                {
-                    ViewBag.ErrorMessage = "API returned an error while retrieving products.";
+                    if (apiProducts != null) allProducts.AddRange(apiProducts);
                 }
             }
             catch
             {
-                ViewBag.ErrorMessage ??= "Could not connect to the API.";
+                ViewBag.ErrorMessage ??= "Could not connect to API.";
             }
 
             // File Share files
             try { ViewBag.LocalFiles = await _fileShareService.ListFilesAsync("uploads"); }
             catch { ViewBag.LocalFiles = new List<FileModel>(); }
 
-            // Blob Storage files
+            // Blob files
             try { ViewBag.BlobFiles = await FetchBlobUrlsAsync(); }
             catch { ViewBag.BlobFiles = new List<string>(); }
 
@@ -89,29 +96,127 @@ namespace POE_CLOUD1.Controllers
             try { ViewBag.QueueMessages = await _svc.PeekMessagesAsync(5); }
             catch { ViewBag.QueueMessages = new List<string>(); }
 
-            return View(products);
+            return View(allProducts);
         }
+        [HttpGet]
+        public IActionResult AddProduct() => View(new Product());
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> AddProduct(Product product, IFormFile? file)
+        {
+            if (file != null && file.Length > 0)
+                product.ImageURL = await UploadFileToBlobStorageAndReturnUrl(file.OpenReadStream(), file.FileName);
+
+            if (ModelState.IsValid)
+            {
+                product.PartitionKey = "Product";
+                product.RowKey = Guid.NewGuid().ToString();
+                product.Timestamp = DateTimeOffset.UtcNow;
+
+                await _tableStorageService.AddProductAsync(product);
+
+                TempData["message"] = "product added successfully!";
+                return RedirectToAction("Index");
+            }
+
+            return View(product);
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> Details(string partitionKey, string rowKey)
+        {
+            if (string.IsNullOrEmpty(partitionKey) || string.IsNullOrEmpty(rowKey))
+                return NotFound();
+
+            var product = await _tableStorageService.GetProductByIdAsync(partitionKey, rowKey);
+            if (product == null) return NotFound();
+
+            return View(product);
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> Edit(string partitionKey, string rowKey)
+        {
+            if (string.IsNullOrEmpty(partitionKey) || string.IsNullOrEmpty(rowKey))
+                return NotFound();
+
+            var customer = await _tableStorageService.GetCustomerByIdAsync(partitionKey, rowKey);
+            if (customer == null) return NotFound();
+
+            return View(customer);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Edit(Product product, IFormFile? file)
+        {
+            if (file != null && file.Length > 0)
+                product.ImageURL = await UploadFileToBlobStorageAndReturnUrl(file.OpenReadStream(), file.FileName);
+
+            if (ModelState.IsValid)
+            {
+                await _tableStorageService.UpdateProductAsync(product);
+                TempData["message"] = "product updated successfully!";
+                return RedirectToAction("Index");
+            }
+
+            return View(product);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Delete(string partitionKey, string rowKey, string? imageUrl)
+        {
+            if (!string.IsNullOrEmpty(imageUrl))
+                await DeleteBlobAsync(imageUrl);
+
+            await _tableStorageService.DeleteCustomerAsync(partitionKey, rowKey);
+            TempData["message"] = "product deleted successfully!";
+            return RedirectToAction("Index");
+        }
+
+        // ========================= ADD TO CART =========================
         [HttpGet]
         public IActionResult AddToCart(int id)
         {
-            var product = catalog.Find(id);
+            var product = _catalog.Find(id);
             if (product == null) return NotFound();
 
             return View(product);
         }
 
         [HttpPost]
-        public IActionResult AddToCart(int id, int qty = 1)
+        public async Task<IActionResult> AddToCart(int id, int qty = 1)
         {
-            var product = catalog.Find(id);
-            if (product == null) return NotFound();
+            var product = _catalog.Find(id);
 
+          
+            if (product == null)
+            {
+                var products = await _tableStorageService.GetAllProductsAsync("Product");
+                var apiProduct = products.FirstOrDefault(p => p.ProductId == id);
 
+                if (apiProduct != null)
+                {
+                    product = new CatalogProduct
+                    {
+                        Id = apiProduct.ProductId,
+                        Name = apiProduct.ProductName,
+                        Price = (decimal)apiProduct.ProductPrice
+                    };
+                }
+            }
+
+            if (product == null)
+                return NotFound($"Product with ID {id} not found.");
+
+           
             var data = HttpContext.Session.GetString("CART");
-            var cart = data == null ? new List<CartItem>() : JsonSerializer.Deserialize<List<CartItem>>(data) ?? new List<CartItem>();
+            var cart = data == null ? new List<CartItem>() :
+                       JsonSerializer.Deserialize<List<CartItem>>(data) ?? new List<CartItem>();
 
-
-
+     
             var existing = cart.FirstOrDefault(c => c.ProductId == id);
             if (existing == null)
             {
@@ -130,7 +235,7 @@ namespace POE_CLOUD1.Controllers
                 cart.Add(updated);
             }
 
-
+            // Save to session
             var json = JsonSerializer.Serialize(cart.OrderBy(c => c.ProductId).ToList());
             HttpContext.Session.SetString("CART", json);
 
@@ -138,8 +243,6 @@ namespace POE_CLOUD1.Controllers
 
             return RedirectToAction("Index", "Cart");
         }
-
-       
 
         // ========================= BLOB METHODS =========================
         private async Task<string> UploadFileToBlobStorageAndReturnUrl(Stream stream, string fileName)
