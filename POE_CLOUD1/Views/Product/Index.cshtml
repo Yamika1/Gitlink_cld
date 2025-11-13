@@ -4,7 +4,7 @@
     ViewData["Title"] = "Product Dashboard";
 }
 
-<!-- ======= PAGE HEADER ======= -->
+
 <div class="text-center mb-4">
     <h1 class="display-5 fw-bold">Products</h1>
     <a asp-controller="Cart" asp-action="Index" class="btn btn-outline-primary mt-2">
@@ -27,13 +27,15 @@
         </tr>
     </thead>
     <tbody>
-        @foreach (var product in Model)
+        @foreach (var product in Model.Where(p =>
+                !string.IsNullOrWhiteSpace(p.ProductName) ||
+                !string.IsNullOrWhiteSpace(p.ProductDescription) ||
+                !string.IsNullOrWhiteSpace(p.ProductType)))
         {
             <tr>
                 <td>@product.ProductName</td>
                 <td>@product.ProductDescription</td>
                 <td>@product.ProductType</td>
-      
                 <td>
                     <a asp-action="Details"
                        asp-route-partitionKey="@product.PartitionKey"
@@ -51,10 +53,11 @@
             </tr>
         }
     </tbody>
-</table>
-</div>
 
-<!-- ======= ALERTS ======= -->
+</table>
+
+
+
 @if (!string.IsNullOrEmpty(ViewBag.ErrorMessage))
 {
     <div class="alert alert-danger text-center">@ViewBag.ErrorMessage</div>
@@ -81,12 +84,15 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach (var p in Model)
+                    @foreach (var p in Model.Where(p =>
+                                    p.ProductId > 0 &&
+                                    !string.IsNullOrWhiteSpace(p.ProductName)))
                     {
                         <tr>
                             <td>@p.ProductId</td>
                             <td>@p.ProductName</td>
-                            <td>ProductPrice</td>
+                            <td>@p.ProductPrice.ToString("C")</td>
+
                             <td>
                                 <form asp-controller="Product" asp-action="AddToCart" method="post" class="d-inline">
                                     <input type="hidden" name="id" value="@p.ProductId" />
@@ -96,6 +102,7 @@
                                 </form>
                             </td>
                         </tr>
+                    
                     }
                 </tbody>
             </table>

@@ -42,7 +42,7 @@ namespace POE_CLOUD1.Controllers
         [HttpGet]
         public async Task<IActionResult> Index()
         {
-            // Start with local in-memory catalog products
+         
             var allProducts = _catalog.Products
                 .Select(p => new Product
                 {
@@ -84,15 +84,15 @@ namespace POE_CLOUD1.Controllers
                 ViewBag.ErrorMessage ??= "Could not connect to API.";
             }
 
-            // File Share files
+            
             try { ViewBag.LocalFiles = await _fileShareService.ListFilesAsync("uploads"); }
             catch { ViewBag.LocalFiles = new List<FileModel>(); }
 
-            // Blob files
+     
             try { ViewBag.BlobFiles = await FetchBlobUrlsAsync(); }
             catch { ViewBag.BlobFiles = new List<string>(); }
 
-            // Queue messages
+          
             try { ViewBag.QueueMessages = await _svc.PeekMessagesAsync(5); }
             catch { ViewBag.QueueMessages = new List<string>(); }
 

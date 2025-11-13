@@ -5,67 +5,99 @@
 }
 
 <div class="text-center mb-4">
-    <h1 class="display-4">Orders Dashboard</h1>
-    <p class="lead">This data is retrieved from Azure Table Storage</p>
-    <a asp-action="Index" class="btn btn-primary">Refresh</a>
+    <h1 class="display-4 fw-bold">Orders Dashboard</h1>
+    <p class="lead text-muted">This data is retrieved from Azure Table Storage</p>
+    <a asp-action="Index" class="btn btn-outline-primary mt-2">
+        <i class="bi bi-arrow-clockwise"></i> Refresh
+    </a>
 </div>
 
+<!-- Alerts -->
 @if (!string.IsNullOrEmpty(ViewBag.ErrorMessage))
 {
-    <div class="alert alert-danger">@ViewBag.ErrorMessage</div>
+    <div class="alert alert-danger text-center">@ViewBag.ErrorMessage</div>
 }
 
 @if (TempData["message"] != null)
 {
-    <div class="alert alert-success">@TempData["message"]</div>
+    <div class="alert alert-success text-center">@TempData["message"]</div>
 }
 
-<p>
-    <a asp-action="AddOrder" class="btn btn-success mb-3">+ Add New Order</a>
-</p>
+<!-- Add New Order Button -->
+<div class="mb-3 text-end">
+    <a asp-action="AddOrder" class="btn btn-primary">
+        <i class="bi bi-plus-circle"></i> Add New Order
+    </a>
+</div>
 
-@if (Model != null && Model.Any())
+<!-- ======= Orders Table ======= -->
+@if (Model != null && Model.Any(o =>
+        !string.IsNullOrWhiteSpace(o.OrderName) ||
+        !string.IsNullOrWhiteSpace(o.OrderType) ||
+        !string.IsNullOrWhiteSpace(o.OrderStatus) ||
+        !string.IsNullOrWhiteSpace(o.PaymentOption)))
 {
-    <div class="row">
-        @foreach (var order in Model.OrderByDescending(o => o.Timestamp))
-        {
-            <div class="col-md-4 mb-4">
-                <div class="card h-100 shadow-sm">
-                    @if (!string.IsNullOrEmpty(order.ImageUrl))
-                    {
-                        <img src="@order.ImageUrl" class="card-img-top" alt="@order.OrderName" />
-                    }
-                    <div class="card-body">
-                        <h5 class="card-title">@order.OrderName</h5>
-                        <p><strong>Type:</strong> @order.OrderType</p>
-                        <p>
-                            <strong>Status:</strong>
-                            <span class="badge @(order.OrderStatus == "Pending" ? "bg-warning text-dark" :
-                                                                                    order.OrderStatus == "Shipped" ? "bg-info text-dark" :
-                                                                                    order.OrderStatus == "Delivered" ? "bg-success" : "bg-secondary")">
+    <div class="table-responsive shadow-sm rounded">
+        <table class="table table-striped align-middle">
+            <thead class="table-light">
+                <tr class="fw-bold text-center">
+                    <th>Order Name</th>
+                    <th>Order Type</th>
+                    <th>Status</th>
+                    <th>Payment Option</th>
+                    <th style="width: 180px;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var order in Model.Where(o =>
+                            !string.IsNullOrWhiteSpace(o.OrderName) ||
+                            !string.IsNullOrWhiteSpace(o.OrderType) ||
+                            !string.IsNullOrWhiteSpace(o.OrderStatus) ||
+                            !string.IsNullOrWhiteSpace(o.PaymentOption)))
+                {
+                    <tr class="text-center">
+                        <td>@order.OrderName</td>
+                        <td>@order.OrderType</td>
+                        <td>
+                            <span class="badge
+                                        @(order.OrderStatus == "Pending" ? "bg-warning text-dark" :
+                                                                    order.OrderStatus == "Shipped" ? "bg-info text-dark" :
+                                                                    order.OrderStatus == "Delivered" ? "bg-success" : "bg-secondary")">
                         @order.OrderStatus
                     </span>
-                </p>
-            </div>
-            <div class="card-footer d-flex justify-content-between">
-                <a asp-action="Details" asp-route-partitionKey="@order.PartitionKey" asp-route-rowKey="@order.RowKey" class="btn btn-sm btn-primary">Details</a>
-                <a asp-action="Edit" asp-route-partitionKey="@order.PartitionKey" asp-route-rowKey="@order.RowKey" class="btn btn-sm btn-warning">Edit</a>
-                <form asp-action="Delete" method="post" class="d-inline">
-                    <input type="hidden" name="partitionKey" value="@order.PartitionKey" />
-                    <input type="hidden" name="rowKey" value="@order.RowKey" />
-                    <input type="hidden" name="imageUrl" value="@order.ImageUrl" />
-                    <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Delete this order?')">Delete</button>
-                </form>
-            </div>
-        </div>
-    </div>
-        }
+                </td>
+                <td>@order.PaymentOption</td>
+                <td>
+                    <a asp-action="Details"
+                       asp-route-partitionKey="@order.PartitionKey"
+                       asp-route-rowKey="@order.RowKey"
+                       class="btn btn-info btn-sm me-1">Details</a>
+                    <a asp-action="Edit"
+                       asp-route-partitionKey="@order.PartitionKey"
+                       asp-route-rowKey="@order.RowKey"
+                       class="btn btn-warning btn-sm me-1">Edit</a>
+                    <form asp-action="Delete" method="post" class="d-inline">
+                        <input type="hidden" name="partitionKey" value="@order.PartitionKey" />
+                        <input type="hidden" name="rowKey" value="@order.RowKey" />
+                        <input type="hidden" name="imageUrl" value="@order.ImageUrl" />
+                        <button type="submit" class="btn btn-danger btn-sm"
+                                onclick="return confirm('Delete this order?')">
+                            Delete
+                        </button>
+                    </form>
+                </td>
+            </tr>
+                        }
+            </tbody>
+        </table>
     </div>
 }
 else
 {
-    <p class="fst-italic text-muted">No orders found</p>
+    <p class="fst-italic text-muted text-center mt-3">No orders found.</p>
 }
+
+<hr class="my-5" />
 
 <!-- ================= FILE SHARE STORAGE ================= -->
 <div class="card mb-4 shadow-sm">

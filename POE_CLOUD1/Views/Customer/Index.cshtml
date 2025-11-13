@@ -35,7 +35,11 @@
             </tr>
         </thead>
         <tbody>
-            @foreach (var customer in Model)
+            @foreach (var customer in Model.Where(c =>
+                        !string.IsNullOrWhiteSpace(c.CustomerFirstName) ||
+                        !string.IsNullOrWhiteSpace(c.CustomerSurname) ||
+                        !string.IsNullOrWhiteSpace(c.Email) ||
+                        !string.IsNullOrWhiteSpace(c.PhoneNumber)))
             {
                 <tr>
                     <td>@customer.CustomerFirstName</td>

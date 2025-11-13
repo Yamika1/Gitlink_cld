@@ -50,7 +50,7 @@ namespace POE_CLOUD1.Controllers
                 ViewBag.ErrorMessage = "Could not retrieve orders from Table Storage.";
             }
 
-            // Fetch orders from API
+          
             try
             {
                 var httpClient = _httpClientFactory.CreateClient();
@@ -74,7 +74,6 @@ namespace POE_CLOUD1.Controllers
                 ViewBag.ErrorMessage ??= "Could not connect to the API.";
             }
 
-            // File Share files
             try
             {
                 ViewBag.LocalFiles = await _fileShareService.ListFilesAsync("uploads");
@@ -84,7 +83,7 @@ namespace POE_CLOUD1.Controllers
                 ViewBag.LocalFiles = new List<FileModel>();
             }
 
-            // Blob Storage files
+         
             try
             {
                 ViewBag.BlobFiles = await FetchBlobUrlsAsync();
@@ -94,7 +93,7 @@ namespace POE_CLOUD1.Controllers
                 ViewBag.BlobFiles = new List<string>();
             }
 
-            // Queue messages
+        
             try
             {
                 ViewBag.QueueMessages = await _svc.PeekMessagesAsync(5);
@@ -119,7 +118,7 @@ namespace POE_CLOUD1.Controllers
 
             if (ModelState.IsValid)
             {
-                order.PartitionKey = "OrderPartition";
+                order.PartitionKey = "Orders";
                 order.RowKey = Guid.NewGuid().ToString();
                 order.Timestamp = DateTimeOffset.UtcNow;
                 order.OrderDate = DateTime.UtcNow;

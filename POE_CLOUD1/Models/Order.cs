@@ -32,7 +32,7 @@ namespace POE_CLOUD1.Models
         public ETag ETag { get; set; }
 
         public string? PaymentOption { get; set; }
-        public List<string> Products { get; set; } = new List<string>();
+        public string? Products { get; set; }
     }
 }
 

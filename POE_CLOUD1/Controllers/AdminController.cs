@@ -18,14 +18,14 @@ namespace POE_CLOUD1.Controllers
             _roleManager = roleManager;
         }
 
-        // List all users
+       
         public IActionResult Dashboard()
         {
             var users = _userManager.Users.ToList();
             return View(users);
         }
 
-        // View user details
+
         public async Task<IActionResult> Details(string id)
         {
             if (id == null)
@@ -48,7 +48,7 @@ namespace POE_CLOUD1.Controllers
             return View(model);
         }
 
-        // Delete user
+       
         [HttpPost]
         public async Task<IActionResult> Delete(string id)
         {
@@ -60,7 +60,7 @@ namespace POE_CLOUD1.Controllers
             return RedirectToAction("Dashboard");
         }
 
-        // Promote or demote user
+      
         [HttpPost]
         public async Task<IActionResult> ChangeRole(string id, string role)
         {
