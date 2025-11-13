@@ -12,7 +12,7 @@
     </a>
 </div>
 
-<!-- Alerts -->
+
 @if (!string.IsNullOrEmpty(ViewBag.ErrorMessage))
 {
     <div class="alert alert-danger text-center">@ViewBag.ErrorMessage</div>
@@ -23,14 +23,14 @@
     <div class="alert alert-success text-center">@TempData["message"]</div>
 }
 
-<!-- Add New Order Button -->
+
 <div class="mb-3 text-end">
     <a asp-action="AddOrder" class="btn btn-primary">
         <i class="bi bi-plus-circle"></i> Add New Order
     </a>
 </div>
 
-<!-- ======= Orders Table ======= -->
+
 @if (Model != null && Model.Any(o =>
         !string.IsNullOrWhiteSpace(o.OrderName) ||
         !string.IsNullOrWhiteSpace(o.OrderType) ||
